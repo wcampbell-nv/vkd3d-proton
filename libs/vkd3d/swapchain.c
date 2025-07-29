@@ -3329,3 +3329,34 @@ HRESULT dxgi_vk_swap_chain_factory_init(struct d3d12_command_queue *queue, struc
     chain->queue = queue;
     return S_OK;
 }
+
+struct latency_marker_callback_data {
+    struct dxgi_vk_swap_chain *chain;
+    uint64_t frame_id;
+    VkLatencyMarkerNV marker;
+};
+
+static void latency_marker_callback(void *userdata)
+{
+    struct latency_marker_callback_data *data = userdata;
+    dxgi_vk_swap_chain_set_latency_marker(data->chain, data->frame_id, data->marker);
+    dxgi_vk_swap_chain_decref(data->chain);
+    vkd3d_free(data);
+}
+
+void dxgi_vk_swap_chain_enqueue_latency_marker(struct dxgi_vk_swap_chain *chain, uint64_t frame_id, VkLatencyMarkerNV marker)
+{
+    struct latency_marker_callback_data *data;
+
+    if (!(data = vkd3d_malloc(sizeof(*data))))
+    {
+        dxgi_vk_swap_chain_decref(chain);
+        return;
+    }
+
+    data->chain = chain;
+    data->frame_id = frame_id;
+    data->marker = marker;
+
+    d3d12_command_queue_enqueue_callback(chain->queue, latency_marker_callback, data);
+}
